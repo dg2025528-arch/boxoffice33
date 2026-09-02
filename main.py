@@ -13,6 +13,8 @@
 #       section_05 : 장르별 총 관객 (박스플롯, 10편 이상 장르만)
 #       section_06 : ④의 버블 버전 (크기=첫 주 관객)
 #       section_07 : 제작 국가 → 장르 (선버스트, 크기=편수)
+#       section_08 : 흥행 등급별 특징 비교 (무엇이 달랐나?)   ← 새로 추가
+#       section_09 : 뒷심 지수 (첫 주 반짝 vs 입소문 흥행)    ← 새로 추가
 #       ... 계속 추가
 #  4) 메인 실행부
 # =========================================================
@@ -106,7 +108,7 @@ def section_01_genre_donut(df: pd.DataFrame):
         genre_count,
         names="장르",
         values="편수",
-        hole=0.45,                       # 가운데 구멍 -> 도넛
+        hole=0.45,
         title="장르별 영화 편수",
     )
     fig.update_traces(
@@ -130,13 +132,12 @@ def section_02_genre_treemap(df: pd.DataFrame):
         "칸의 **크기는 총 관객수**예요. 칸을 클릭하면 그 장르만 확대해서 볼 수 있어요."
     )
 
-    # 관객수가 없거나 0인 행은 트리맵에서 칸을 만들 수 없으니 제외
     tm = df.dropna(subset=["total_audi"])
     tm = tm[tm["total_audi"] > 0]
 
     fig = px.treemap(
         tm,
-        path=[px.Constant("전체"), "장르", "movieNm"],   # 계층: 전체 > 장르 > 영화
+        path=[px.Constant("전체"), "장르", "movieNm"],
         values="total_audi",
         color="장르",
         title="장르 → 영화 (칸 크기 = 총 관객수)",
@@ -183,15 +184,12 @@ def section_03_total_audi_hist(df: pd.DataFrame):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── 자동 해설: 가장 많이 몰린 구간 찾기 ──────────────────
-    # pd.cut으로 실제 구간을 나눠서 어느 구간에 가장 많은 영화가 있는지 계산
     binned = pd.cut(data["total_audi"], bins=n_bins)
     top_bin = binned.value_counts().sort_values(ascending=False).index[0]
     top_bin_count = binned.value_counts().max()
     low = int(top_bin.left) if top_bin.left > 0 else 0
     high = int(top_bin.right)
 
-    # 가장 관객이 많은 영화
     best = data.loc[data["total_audi"].idxmax()]
 
     st.info(
@@ -251,7 +249,6 @@ def section_04_scatter(df: pd.DataFrame):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # 상관계수: 두 값이 함께 커지는 정도 (-1 ~ 1)
     corr = data["first_scrn"].corr(data["total_audi"])
     st.info(
         f"🔗 개봉일 스크린수와 총 관객수의 **상관계수는 {corr:.2f}** 입니다. "
@@ -272,7 +269,6 @@ def section_05_genre_box(df: pd.DataFrame):
 
     data = df.dropna(subset=["total_audi"])
 
-    # 10편 이상인 장르만 남기기
     counts = data["장르"].value_counts()
     keep_genres = counts[counts >= 10].index.tolist()
     filtered = data[data["장르"].isin(keep_genres)]
@@ -285,7 +281,6 @@ def section_05_genre_box(df: pd.DataFrame):
         f"포함된 장르: {', '.join(f'{g}({counts[g]}편)' for g in keep_genres)}"
     )
 
-    # 중앙값이 큰 장르부터 보이도록 순서 정하기
     order = (
         filtered.groupby("장르")["total_audi"].median()
         .sort_values(ascending=False).index.tolist()
@@ -296,8 +291,8 @@ def section_05_genre_box(df: pd.DataFrame):
         x="장르",
         y="total_audi",
         color="장르",
-        points="outliers",              # 이상치 점만 표시
-        hover_name="movieNm",           # 점에 올리면 영화명
+        points="outliers",
+        hover_name="movieNm",
         category_orders={"장르": order},
         title="장르별 총 관객수 분포 (10편 이상 장르만)",
         labels={"장르": "장르", "total_audi": "총 관객수(명)"},
@@ -335,13 +330,13 @@ def section_06_bubble(df: pd.DataFrame):
     )
 
     data = df.dropna(subset=["first_scrn", "total_audi", "first_week_audi"])
-    data = data[data["first_week_audi"] > 0]   # 크기는 0보다 커야 그려짐
+    data = data[data["first_week_audi"] > 0]
 
     fig = px.scatter(
         data,
         x="first_scrn",
         y="total_audi",
-        size="first_week_audi",          # 점 크기 = 첫 주 관객
+        size="first_week_audi",
         color="장르",
         hover_name="movieNm",
         size_max=45,
@@ -385,7 +380,6 @@ def section_07_sunburst(df: pd.DataFrame):
         "칸의 크기는 **영화 편수**예요. 칸을 클릭하면 그 국가만 확대돼요."
     )
 
-    # 편수를 세기 위해 개수 1인 열을 만들어 합계로 사용
     data = df.copy()
     data["편수"] = 1
 
@@ -406,9 +400,7 @@ def section_07_sunburst(df: pd.DataFrame):
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📋 국가별 편수 표로 보기"):
-        nation_table = (
-            data["국가"].value_counts().reset_index()
-        )
+        nation_table = data["국가"].value_counts().reset_index()
         nation_table.columns = ["제작 국가", "영화 편수"]
         nation_table["비율(%)"] = (
             nation_table["영화 편수"] / len(data) * 100
@@ -420,11 +412,292 @@ def section_07_sunburst(df: pd.DataFrame):
     insight_box(key="insight_07")
 
 
+def section_08_success_compare(df: pd.DataFrame):
+    """
+    [구역 8] 흥행 등급별로 특징이 얼마나 다른지 비교하기.
+
+    ★ 먼저 알아둘 것 (아주 중요!)
+      이 데이터는 '박스오피스 10위권에 든 영화'만 모은 것이다.
+      즉 '실패한 영화'는 애초에 데이터에 없다 -> 생존자 편향(survivorship bias).
+      그래서 "인기 영화 vs 비인기 영화"를 비교할 수는 없다.
+      대신 "성공한 영화들 안에서도 초대박과 평범함을 가른 것은 무엇인가"를 물을 수 있다.
+
+    ★ 원인과 결과를 구분하자
+      - 개봉 '전'에 정해지는 값  : first_scrn, first_show   -> 원인 후보
+      - 개봉 '초반' 반응        : first_week_audi          -> 중간
+      - 흥행의 '결과'           : days_in_top10, total_audi -> 결과
+    """
+    st.subheader("⑧ 흥행 등급별로 무엇이 달랐나? (원인 찾기)")
+
+    st.warning(
+        "⚠️ **먼저 알아둘 것 — 생존자 편향**\n\n"
+        "이 데이터는 **10위권에 든 영화 216편만** 모은 것입니다. "
+        "10위권에 한 번도 못 든 영화는 아예 들어 있지 않아요.\n\n"
+        "그래서 *\"인기 영화 vs 비인기 영화\"* 는 비교할 수 없습니다. "
+        "대신 이렇게 물어봅시다 👇\n\n"
+        "> **\"성공한 영화들 중에서도, 유독 크게 흥행한 영화는 무엇이 달랐을까?\"**"
+    )
+
+    data = df.dropna(subset=["total_audi"]).copy()
+
+    # ── 총 관객 기준으로 세 그룹 나누기 (상위25% / 중간50% / 하위25%) ──
+    q1 = data["total_audi"].quantile(0.25)
+    q3 = data["total_audi"].quantile(0.75)
+
+    def grade(x):
+        if x >= q3:
+            return "상위 25% (대흥행)"
+        elif x >= q1:
+            return "중간 50%"
+        else:
+            return "하위 25%"
+
+    data["흥행등급"] = data["total_audi"].apply(grade)
+    grade_order = ["하위 25%", "중간 50%", "상위 25% (대흥행)"]
+
+    st.caption(
+        f"기준선 — 하위 25%: {int(q1):,}명 미만 / "
+        f"상위 25%: {int(q3):,}명 이상"
+    )
+
+    # ── 비교할 항목 고르기 ────────────────────────────────
+    metric_options = {
+        "개봉일 스크린수 (first_scrn)": "first_scrn",
+        "개봉일 상영횟수 (first_show)": "first_show",
+        "첫 주 관객수 (first_week_audi)": "first_week_audi",
+        "10위권 유지 일수 (days_in_top10)": "days_in_top10",
+    }
+    picked_label = st.selectbox(
+        "비교해 볼 항목을 고르세요",
+        options=list(metric_options.keys()),
+        key="sec08_metric",
+    )
+    picked_col = metric_options[picked_label]
+
+    plot_data = data.dropna(subset=[picked_col])
+
+    # ── 그룹별 분포를 박스플롯으로 (평균 하나보다 분포 전체가 정직함) ──
+    fig = px.box(
+        plot_data,
+        x="흥행등급",
+        y=picked_col,
+        color="흥행등급",
+        points="all",                       # 모든 영화 점을 함께 표시
+        hover_name="movieNm",
+        category_orders={"흥행등급": grade_order},
+        title=f"흥행 등급별 {picked_label} 분포",
+        labels={"흥행등급": "흥행 등급", picked_col: picked_label},
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{hovertext}</b><br>"
+                      f"{picked_label}: " + "%{y:,}<extra></extra>",
+        marker=dict(opacity=0.5, size=6),
+    )
+    fig.update_layout(
+        showlegend=False,
+        yaxis_tickformat=",",
+        xaxis_title="흥행 등급 (총 관객 기준)",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── 그룹별 중앙값을 숫자로 정리 ──────────────────────────
+    summary = (
+        plot_data.groupby("흥행등급")[picked_col]
+        .agg(중앙값="median", 평균="mean", 편수="count")
+        .reindex(grade_order)
+        .reset_index()
+    )
+
+    st.markdown("**📊 그룹별 요약 (중앙값으로 비교하는 게 안전해요)**")
+    show = summary.copy()
+    show["중앙값"] = show["중앙값"].map(lambda v: f"{v:,.0f}")
+    show["평균"] = show["평균"].map(lambda v: f"{v:,.0f}")
+    st.dataframe(show, use_container_width=True, hide_index=True)
+
+    # 상위 25% 가 하위 25% 의 몇 배인지 자동 계산
+    top_med = summary.loc[summary["흥행등급"] == "상위 25% (대흥행)", "중앙값"].values[0]
+    bot_med = summary.loc[summary["흥행등급"] == "하위 25%", "중앙값"].values[0]
+    if bot_med and bot_med > 0:
+        ratio = top_med / bot_med
+        st.info(
+            f"📌 **상위 25% 그룹의 {picked_label} 중앙값은 "
+            f"하위 25% 그룹의 약 {ratio:.1f}배**입니다."
+        )
+
+    # ── 전체 항목을 한눈에: 모든 항목의 그룹별 중앙값 막대 ────────
+    st.markdown("**🔎 네 가지 항목을 한 번에 비교하기**")
+    st.caption(
+        "항목마다 단위가 달라서(개 / 회 / 명 / 일) 직접 비교가 어렵습니다. "
+        "그래서 **'하위 25% 그룹의 중앙값 = 1'로 놓고 몇 배인지**로 바꿔서 그렸어요."
+    )
+
+    rows = []
+    for label, col in metric_options.items():
+        med = data.groupby("흥행등급")[col].median().reindex(grade_order)
+        base = med["하위 25%"]
+        if pd.isna(base) or base == 0:
+            continue
+        for g in grade_order:
+            rows.append({
+                "항목": label.split(" (")[0],   # 괄호 앞부분만
+                "흥행등급": g,
+                "배수": med[g] / base,
+                "실제값": med[g],
+            })
+    ratio_df = pd.DataFrame(rows)
+
+    fig2 = px.bar(
+        ratio_df,
+        x="항목",
+        y="배수",
+        color="흥행등급",
+        barmode="group",
+        category_orders={"흥행등급": grade_order},
+        title="하위 25% 그룹을 1로 놓았을 때, 각 그룹의 중앙값 배수",
+        labels={"배수": "하위 25% 대비 배수", "항목": "비교 항목"},
+        custom_data=["실제값"],
+    )
+    fig2.update_traces(
+        hovertemplate="<b>%{x}</b><br>"
+                      "%{fullData.name}<br>"
+                      "배수: %{y:.2f}배<br>"
+                      "실제 중앙값: %{customdata[0]:,.0f}<extra></extra>"
+    )
+    fig2.update_layout(yaxis_title="하위 25% 대비 배수", legend_title_text="흥행 등급")
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.success(
+        "🧭 **해석할 때 주의할 점**\n\n"
+        "- **개봉일 스크린수·상영횟수**가 크게 차이 난다면 → 개봉 *전*의 조건이 흥행과 관련 있다는 뜻.\n"
+        "- **10위권 유지 일수**가 크게 차이 나는 건 당연합니다. 흥행했으니 오래 남은 것이니까요. "
+        "이건 **원인이 아니라 결과**예요.\n"
+        "- 차이가 보인다고 해서 **원인이라고 단정할 수는 없습니다.** "
+        "스크린을 많이 줘서 흥행한 걸까요, 흥행할 것 같아서 스크린을 많이 준 걸까요? 🤔"
+    )
+
+    insight_box(key="insight_08")
+
+
+def section_09_word_of_mouth(df: pd.DataFrame):
+    """
+    [구역 9] 뒷심 지수 = 총 관객 ÷ 첫 주 관객.
+
+    - 값이 크다  -> 첫 주엔 조용했는데 이후 입소문으로 오래 흥행
+    - 값이 작다  -> 첫 주에 몰리고 빠르게 식음
+    같은 '인기'라도 종류가 다르다는 것을 보여 주는 그래프.
+    """
+    st.subheader("⑨ 인기의 두 종류 — '첫 주 폭발형' vs '입소문 장기형'")
+    st.write(
+        "**뒷심 지수 = 총 관객 ÷ 첫 주 관객**을 만들었습니다.\n\n"
+        "- 지수가 **크면** → 첫 주엔 조용했지만 **입소문으로 길게 흥행**한 영화\n"
+        "- 지수가 **작으면** → 첫 주에 관객이 몰렸다가 **빠르게 식은** 영화"
+    )
+
+    data = df.dropna(subset=["total_audi", "first_week_audi", "days_in_top10"]).copy()
+    data = data[data["first_week_audi"] > 0]
+
+    # 뒷심 지수 만들기
+    data["뒷심지수"] = data["total_audi"] / data["first_week_audi"]
+
+    median_wom = data["뒷심지수"].median()
+    data["흥행유형"] = data["뒷심지수"].apply(
+        lambda v: "입소문 장기형" if v >= median_wom else "첫 주 폭발형"
+    )
+
+    # ── 산점도: x=첫 주 관객, y=총 관객 / 색=유형 / 크기=유지일수 ──
+    fig = px.scatter(
+        data,
+        x="first_week_audi",
+        y="total_audi",
+        color="흥행유형",
+        size="days_in_top10",
+        hover_name="movieNm",
+        size_max=30,
+        log_x=True,                 # 값의 폭이 커서 로그 축이 보기 좋음
+        log_y=True,
+        title="첫 주 관객 ↔ 총 관객 (점 크기 = 10위권 유지 일수)",
+        labels={
+            "first_week_audi": "첫 주 관객수(명, 로그)",
+            "total_audi": "총 관객수(명, 로그)",
+            "흥행유형": "흥행 유형",
+        },
+        custom_data=["뒷심지수", "days_in_top10", "장르"],
+        opacity=0.8,
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{hovertext}</b> (%{customdata[2]})<br>"
+                      "첫 주 관객: %{x:,}명<br>"
+                      "총 관객: %{y:,}명<br>"
+                      "뒷심 지수: %{customdata[0]:.2f}배<br>"
+                      "10위권 유지: %{customdata[1]:.0f}일<extra></extra>"
+    )
+    fig.update_layout(legend_title_text="흥행 유형 (클릭=켜기/끄기)")
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption(
+        f"※ 뒷심 지수 중앙값 **{median_wom:.2f}배**를 기준으로 두 유형을 나눴습니다. "
+        "축이 로그(log)라서, 눈금 간격이 1만→10만→100만처럼 **곱하기로** 커집니다."
+    )
+
+    # ── 뒷심 지수 TOP / BOTTOM 10 ────────────────────────
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🌱 뒷심 지수 TOP 10 (입소문 흥행)**")
+        top10 = data.nlargest(10, "뒷심지수").sort_values("뒷심지수")
+        f1 = px.bar(
+            top10,
+            x="뒷심지수", y="movieNm", orientation="h",
+            labels={"뒷심지수": "뒷심 지수(배)", "movieNm": ""},
+            custom_data=["total_audi", "first_week_audi", "days_in_top10"],
+        )
+        f1.update_traces(
+            marker_color="seagreen",
+            hovertemplate="<b>%{y}</b><br>"
+                          "뒷심 지수: %{x:.2f}배<br>"
+                          "총 관객: %{customdata[0]:,}명<br>"
+                          "첫 주 관객: %{customdata[1]:,}명<br>"
+                          "10위권 유지: %{customdata[2]:.0f}일<extra></extra>",
+        )
+        f1.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(f1, use_container_width=True)
+
+    with col2:
+        st.markdown("**💥 뒷심 지수 BOTTOM 10 (첫 주 반짝)**")
+        bot10 = data.nsmallest(10, "뒷심지수").sort_values("뒷심지수", ascending=False)
+        f2 = px.bar(
+            bot10,
+            x="뒷심지수", y="movieNm", orientation="h",
+            labels={"뒷심지수": "뒷심 지수(배)", "movieNm": ""},
+            custom_data=["total_audi", "first_week_audi", "days_in_top10"],
+        )
+        f2.update_traces(
+            marker_color="indianred",
+            hovertemplate="<b>%{y}</b><br>"
+                          "뒷심 지수: %{x:.2f}배<br>"
+                          "총 관객: %{customdata[0]:,}명<br>"
+                          "첫 주 관객: %{customdata[1]:,}명<br>"
+                          "10위권 유지: %{customdata[2]:.0f}일<extra></extra>",
+        )
+        f2.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(f2, use_container_width=True)
+
+    st.info(
+        "🤔 **생각해 보기**\n\n"
+        "위 두 그룹의 **장르**를 비교해 보세요. "
+        "입소문으로 오래 가는 장르와, 첫 주에 몰리는 장르가 서로 다른가요?\n\n"
+        "혹시 뒷심 지수가 큰 영화는 **개봉일 스크린수가 적었던** 영화는 아닐까요? "
+        "④번 산점도로 돌아가 확인해 보세요."
+    )
+
+    insight_box(key="insight_09")
+
+
 # ---- 여기에 새 그래프 구역을 계속 추가하세요 ----------------
-# def section_08_xxx(df: pd.DataFrame):
-#     st.subheader("⑧ ...")
+# def section_10_xxx(df: pd.DataFrame):
+#     st.subheader("⑩ ...")
 #     ...
-#     insight_box(key="insight_08")
+#     insight_box(key="insight_10")
 # ---------------------------------------------------------
 
 
@@ -454,7 +727,9 @@ def main():
     section_05_genre_box(df)
     section_06_bubble(df)
     section_07_sunburst(df)
-    # section_08_xxx(df)     # 다음 그래프를 만들면 여기에 추가
+    section_08_success_compare(df)
+    section_09_word_of_mouth(df)
+    # section_10_xxx(df)     # 다음 그래프를 만들면 여기에 추가
 
 
 if __name__ == "__main__":
