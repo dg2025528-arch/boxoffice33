@@ -13,8 +13,8 @@
 #       section_05 : 장르별 총 관객 (박스플롯, 10편 이상 장르만)
 #       section_06 : ④의 버블 버전 (크기=첫 주 관객)
 #       section_07 : 제작 국가 → 장르 (선버스트, 크기=편수)
-#       section_08 : 흥행 등급별 특징 비교 (무엇이 달랐나?)   ← 새로 추가
-#       section_09 : 뒷심 지수 (첫 주 반짝 vs 입소문 흥행)    ← 새로 추가
+#       section_08 : 흥행 등급별 특징 비교 (무엇이 달랐나?)
+#       section_09 : 뒷심 지수 (선형 축으로 격차를 드라마틱하게)  ← 수정
 #       ... 계속 추가
 #  4) 메인 실행부
 # =========================================================
@@ -440,7 +440,6 @@ def section_08_success_compare(df: pd.DataFrame):
 
     data = df.dropna(subset=["total_audi"]).copy()
 
-    # ── 총 관객 기준으로 세 그룹 나누기 (상위25% / 중간50% / 하위25%) ──
     q1 = data["total_audi"].quantile(0.25)
     q3 = data["total_audi"].quantile(0.75)
 
@@ -460,7 +459,6 @@ def section_08_success_compare(df: pd.DataFrame):
         f"상위 25%: {int(q3):,}명 이상"
     )
 
-    # ── 비교할 항목 고르기 ────────────────────────────────
     metric_options = {
         "개봉일 스크린수 (first_scrn)": "first_scrn",
         "개봉일 상영횟수 (first_show)": "first_show",
@@ -476,13 +474,12 @@ def section_08_success_compare(df: pd.DataFrame):
 
     plot_data = data.dropna(subset=[picked_col])
 
-    # ── 그룹별 분포를 박스플롯으로 (평균 하나보다 분포 전체가 정직함) ──
     fig = px.box(
         plot_data,
         x="흥행등급",
         y=picked_col,
         color="흥행등급",
-        points="all",                       # 모든 영화 점을 함께 표시
+        points="all",
         hover_name="movieNm",
         category_orders={"흥행등급": grade_order},
         title=f"흥행 등급별 {picked_label} 분포",
@@ -500,7 +497,6 @@ def section_08_success_compare(df: pd.DataFrame):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── 그룹별 중앙값을 숫자로 정리 ──────────────────────────
     summary = (
         plot_data.groupby("흥행등급")[picked_col]
         .agg(중앙값="median", 평균="mean", 편수="count")
@@ -514,7 +510,6 @@ def section_08_success_compare(df: pd.DataFrame):
     show["평균"] = show["평균"].map(lambda v: f"{v:,.0f}")
     st.dataframe(show, use_container_width=True, hide_index=True)
 
-    # 상위 25% 가 하위 25% 의 몇 배인지 자동 계산
     top_med = summary.loc[summary["흥행등급"] == "상위 25% (대흥행)", "중앙값"].values[0]
     bot_med = summary.loc[summary["흥행등급"] == "하위 25%", "중앙값"].values[0]
     if bot_med and bot_med > 0:
@@ -524,7 +519,6 @@ def section_08_success_compare(df: pd.DataFrame):
             f"하위 25% 그룹의 약 {ratio:.1f}배**입니다."
         )
 
-    # ── 전체 항목을 한눈에: 모든 항목의 그룹별 중앙값 막대 ────────
     st.markdown("**🔎 네 가지 항목을 한 번에 비교하기**")
     st.caption(
         "항목마다 단위가 달라서(개 / 회 / 명 / 일) 직접 비교가 어렵습니다. "
@@ -539,7 +533,7 @@ def section_08_success_compare(df: pd.DataFrame):
             continue
         for g in grade_order:
             rows.append({
-                "항목": label.split(" (")[0],   # 괄호 앞부분만
+                "항목": label.split(" (")[0],
                 "흥행등급": g,
                 "배수": med[g] / base,
                 "실제값": med[g],
@@ -582,9 +576,10 @@ def section_09_word_of_mouth(df: pd.DataFrame):
     """
     [구역 9] 뒷심 지수 = 총 관객 ÷ 첫 주 관객.
 
-    - 값이 크다  -> 첫 주엔 조용했는데 이후 입소문으로 오래 흥행
-    - 값이 작다  -> 첫 주에 몰리고 빠르게 식음
-    같은 '인기'라도 종류가 다르다는 것을 보여 주는 그래프.
+    ★ 이번 수정: 로그 축 -> 선형 축(일반 축)
+      - 로그 축: 작은 영화도 넓게 펼쳐져 관계 파악에 좋지만, 초대박의 위엄이 죽는다.
+      - 선형 축: 초대박 영화가 저 멀리 혼자 튀어나가서 '격차'가 극적으로 보인다.
+      - 대신 작은 영화들이 왼쪽 아래에 뭉치므로, '확대 보기'와 '로그 전환'을 옵션으로 둔다.
     """
     st.subheader("⑨ 인기의 두 종류 — '첫 주 폭발형' vs '입소문 장기형'")
     st.write(
@@ -604,21 +599,54 @@ def section_09_word_of_mouth(df: pd.DataFrame):
         lambda v: "입소문 장기형" if v >= median_wom else "첫 주 폭발형"
     )
 
+    # ── 보기 옵션 ────────────────────────────────────────
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        use_log = st.checkbox(
+            "로그 축으로 보기 (뭉친 부분 펼치기)",
+            value=False,
+            key="sec09_log",
+            help="끄면(기본) 선형 축 — 초대박 영화의 격차가 극적으로 보입니다. "
+                 "켜면 로그 축 — 작은 영화들도 넓게 펼쳐집니다.",
+        )
+    with c2:
+        zoom_in = st.checkbox(
+            "확대 보기 (상위 5% 초대형 흥행작 잠시 빼기)",
+            value=False,
+            key="sec09_zoom",
+            help="선형 축에서 왼쪽 아래에 뭉쳐 보이는 영화들을 자세히 보고 싶을 때 켜세요.",
+        )
+
+    plot_data = data.copy()
+    if zoom_in:
+        cut = plot_data["total_audi"].quantile(0.95)
+        hidden = plot_data[plot_data["total_audi"] >= cut]
+        plot_data = plot_data[plot_data["total_audi"] < cut]
+        st.caption(
+            f"🔍 확대 보기 중 — 총 관객 {int(cut):,}명 이상인 "
+            f"**{len(hidden)}편**을 잠시 숨겼습니다: "
+            + ", ".join(f"《{n}》" for n in hidden["movieNm"].head(6))
+        )
+
     # ── 산점도: x=첫 주 관객, y=총 관객 / 색=유형 / 크기=유지일수 ──
     fig = px.scatter(
-        data,
+        plot_data,
         x="first_week_audi",
         y="total_audi",
         color="흥행유형",
         size="days_in_top10",
         hover_name="movieNm",
-        size_max=30,
-        log_x=True,                 # 값의 폭이 커서 로그 축이 보기 좋음
-        log_y=True,
+        size_max=34,
+        log_x=use_log,
+        log_y=use_log,
+        color_discrete_map={
+            "입소문 장기형": "#2E8B57",   # 초록
+            "첫 주 폭발형": "#DC143C",    # 빨강
+        },
         title="첫 주 관객 ↔ 총 관객 (점 크기 = 10위권 유지 일수)",
         labels={
-            "first_week_audi": "첫 주 관객수(명, 로그)",
-            "total_audi": "총 관객수(명, 로그)",
+            "first_week_audi": "첫 주 관객수(명)",
+            "total_audi": "총 관객수(명)",
             "흥행유형": "흥행 유형",
         },
         custom_data=["뒷심지수", "days_in_top10", "장르"],
@@ -629,14 +657,55 @@ def section_09_word_of_mouth(df: pd.DataFrame):
                       "첫 주 관객: %{x:,}명<br>"
                       "총 관객: %{y:,}명<br>"
                       "뒷심 지수: %{customdata[0]:.2f}배<br>"
-                      "10위권 유지: %{customdata[1]:.0f}일<extra></extra>"
+                      "10위권 유지: %{customdata[1]:.0f}일<extra></extra>",
+        marker=dict(line=dict(width=1, color="white")),
     )
-    fig.update_layout(legend_title_text="흥행 유형 (클릭=켜기/끄기)")
+
+    # ── 기준선(대각선) 긋기: 총 관객이 첫 주의 몇 배인지 눈으로 보기 ──
+    # 선형 축일 때만 의미가 잘 살아나므로, 로그일 때도 함께 그려 준다.
+    if not plot_data.empty:
+        x_max = plot_data["first_week_audi"].max() * 1.05
+        y_max = plot_data["total_audi"].max() * 1.05
+
+        for mult, dash, color in [(1, "dot", "gray"),
+                                  (2, "dash", "#888"),
+                                  (5, "dashdot", "#aaa")]:
+            # y = mult * x 직선이 그래프 안에 들어오는 구간까지만 그린다
+            x_end = min(x_max, y_max / mult)
+            fig.add_scatter(
+                x=[0, x_end],
+                y=[0, mult * x_end],
+                mode="lines",
+                line=dict(dash=dash, color=color, width=1.5),
+                name=f"총 관객 = 첫 주 × {mult}",
+                hoverinfo="skip",
+                showlegend=True,
+            )
+
+    fig.update_layout(
+        xaxis_tickformat=",",
+        yaxis_tickformat=",",
+        legend_title_text="구분 (클릭=켜기/끄기)",
+        height=560,
+    )
     st.plotly_chart(fig, use_container_width=True)
 
+    if use_log:
+        st.caption(
+            "📐 지금은 **로그 축**입니다. 눈금이 1만→10만→100만처럼 **곱하기**로 커져서, "
+            "작은 영화들도 넓게 펼쳐져 보입니다."
+        )
+    else:
+        st.caption(
+            "📐 지금은 **선형 축(일반 축)**입니다. 눈금이 100만→200만→300만처럼 "
+            "**더하기**로 커져서, 초대형 흥행작이 얼마나 압도적인지 그대로 드러납니다. "
+            "대신 작은 영화들은 왼쪽 아래에 뭉쳐 보이죠. "
+            "→ 그럴 땐 위의 **확대 보기**를 켜 보세요."
+        )
+
     st.caption(
-        f"※ 뒷심 지수 중앙값 **{median_wom:.2f}배**를 기준으로 두 유형을 나눴습니다. "
-        "축이 로그(log)라서, 눈금 간격이 1만→10만→100만처럼 **곱하기로** 커집니다."
+        f"※ 점선은 기준선입니다. 점이 **위쪽 선에 가까울수록** 첫 주 대비 여러 배 성장한 영화예요. "
+        f"뒷심 지수 중앙값 **{median_wom:.2f}배**를 기준으로 두 유형(색)을 나눴습니다."
     )
 
     # ── 뒷심 지수 TOP / BOTTOM 10 ────────────────────────
@@ -652,7 +721,7 @@ def section_09_word_of_mouth(df: pd.DataFrame):
             custom_data=["total_audi", "first_week_audi", "days_in_top10"],
         )
         f1.update_traces(
-            marker_color="seagreen",
+            marker_color="#2E8B57",
             hovertemplate="<b>%{y}</b><br>"
                           "뒷심 지수: %{x:.2f}배<br>"
                           "총 관객: %{customdata[0]:,}명<br>"
@@ -672,7 +741,7 @@ def section_09_word_of_mouth(df: pd.DataFrame):
             custom_data=["total_audi", "first_week_audi", "days_in_top10"],
         )
         f2.update_traces(
-            marker_color="indianred",
+            marker_color="#DC143C",
             hovertemplate="<b>%{y}</b><br>"
                           "뒷심 지수: %{x:.2f}배<br>"
                           "총 관객: %{customdata[0]:,}명<br>"
